@@ -1,0 +1,184 @@
+\documentclass[10pt, aspectratio=169]{beamer} % Proporción 16:9 para pantallas modernas
+
+% --- Configuración de Idioma y Fuentes ---
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{helvet} % Fuente similar a Arial para mejor lectura
+
+% --- Configuración del Tema Beamer ---
+\usetheme{Madrid}
+\usecolortheme{whale} % Base azul
+
+% Personalización de colores UCU (Azul institucional)
+\definecolor{UCUBlue}{RGB}{0, 74, 153} 
+\setbeamercolor{palette primary}{bg=UCUBlue, fg=white}
+\setbeamercolor{palette secondary}{bg=UCUBlue!80, fg=white}
+\setbeamercolor{palette tertiary}{bg=UCUBlue!60, fg=white}
+\setbeamercolor{titlelike}{parent=palette primary}
+\setbeamercolor{structure}{fg=UCUBlue}
+
+% --- Paquetes para Código ---
+\usepackage{listings}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codeblue}{rgb}{0.0, 0.0, 0.8}
+
+\lstset{
+    language=C,
+    basicstyle=\ttfamily\scriptsize,
+    keywordstyle=\color{codeblue},
+    commentstyle=\color{codegray},
+    numbers=left,
+    numberstyle=\tiny,
+    breaklines=true,
+    frame=single,
+    showstringspaces=false
+}
+
+% --- Datos de la Presentación ---
+\title[Lab 3: FreeRTOS]{Laboratorio 3: FreeRTOS}
+\subtitle{Diseño de IoT y Sistemas Embebidos - UCU 2026}
+\author[Saucedo et al.]{
+Santiago Blanco \\
+\and Felipe Paladino \\
+\and Piero Saucedo
+}
+\institute[FIT - UCU]{
+    Facultad de Ingeniería y Tecnologías\\
+    Universidad Católica del Uruguay
+}
+\date{28 de mayo de 2026}
+
+% Logo opcional en las esquinas
+\titlegraphic{\includegraphics[width=2cm]{uculogo.png}} % Sube este archivo a tu proyecto
+
+% --- INICIO DEL DOCUMENTO ---
+\begin{document}
+
+% Slide de Título
+\begin{frame}
+    \titlepage
+\end{frame}
+
+% Tabla de Contenidos
+\begin{frame}{Estructura de la Presentación}
+    \tableofcontents
+\end{frame}
+
+% --- SECCIÓN: ARQUITECTURA ---
+\section{Arquitectura del Sistema}
+\begin{frame}{Estructura del Proyecto (Componentes)}
+    Basado en los requerimientos, el proyecto se divide en componentes modulares:
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \begin{itemize}
+                \item \textbf{task\_a}: Parpadeo del LED (Prioridad Baja).
+                \item \textbf{task\_b}: Recepción UART (Prioridad Alta).
+                \item \textbf{task\_c}: Gestión de Timers (Prioridad Media).
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            \begin{itemize}
+                \item \textbf{led\_strip}: Driver WS2812.
+                \item \textbf{shared\_types.h}: Tipos comunes.
+                \item \textbf{main}: Orquestación inicial.
+            \end{itemize}
+        \end{column}
+    \end{columns}
+    \vfill
+    \centering
+    \textit{Mecanismos de comunicación: Queue y Mutex.}
+\end{frame}
+
+% --- SECCIÓN: IMPLEMENTACIÓN ---
+\section{Mecanismos de Sincronización}
+
+\begin{frame}{Sincronización de procesos: Condiciones de Carrera}
+\begin{block}{Condiciones de Carrera}
+    Situaciones en donde dos o más procesos están leyendo o escribiendo algunos datos compartidos y el resultado final depende de quién se ejecuta y exactamente cuándo lo hace, se conocen como \textbf{condiciones de carrera}. (Tanenbaum, 2009)
+\end{block}
+
+\centering
+        \fbox{\includegraphics[width=0.3\textwidth]{race.jpg}} % Espacio para tu captura
+\end{frame}
+
+\begin{frame}{Sincronización de procesos: Semáforo Mutex}
+    Para evitar condiciones de carrera en el color del LED:
+    \begin{itemize}
+        \item Se utiliza un \texttt{SemaphoreHandle\_t} de tipo \textbf{Mutex}.
+        \item \textbf{TASK A} toma el mutex antes de leer el color para el parpadeo.
+        \item \textbf{Timer Callback} toma el mutex antes de actualizar el color global.
+    \end{itemize}
+    \begin{block}{Teorema}
+        El mutex se libera inmediatamente después de la operación crítica para no bloquear el sistema.
+    \end{block}
+\end{frame}
+
+\begin{frame}[fragile]{Sincronización de procesos: Semáforo Mutex}
+    La comunicación entre \textbf{TASK B} (Productor) y \textbf{TASK C} (Consumidor):
+\begin{lstlisting}
+// Envio desde TASK B (UART)
+led_command_t cmd = {.color = parsed_color, .delay_s = 10};
+xQueueSend(xCommandQueue, &cmd, portMAX_DELAY);
+
+// Recepcion en TASK C
+led_command_t received_cmd;
+if (xQueueReceive(xCommandQueue, &received_cmd, portMAX_DELAY)) {
+    // Crear Timer one-shot...
+}
+\end{lstlisting}
+\end{frame}
+
+% --- SECCIÓN: TIMER Y MEMORIA ---
+\section{Gestión de Timers y Memoria}
+
+\begin{frame}{Software Timers y Memoria Dinámica}
+    Gestión de comandos diferidos:
+    \begin{enumerate}
+        \item \textbf{TASK C}: Recibe comando, reserva memoria con \texttt{pvPortMalloc()}.
+        \item \textbf{Timer}: Se crea con el puntero de memoria como \texttt{pvTimerID}.
+        \item \textbf{Callback}: 
+        \begin{itemize}
+            \item Recupera el color del ID del timer.
+            \item Aplica el color (usando Mutex).
+            \item \textbf{Libera} memoria con \texttt{vPortFree()}.
+            \item Auto-elimina el timer (\texttt{xTimerDelete}).
+        \end{itemize}
+    \end{enumerate}
+\end{frame}
+
+% --- SECCIÓN: LOGS Y RESULTADOS ---
+\section{Resultados}
+
+\begin{frame}{Trazabilidad y Logs}
+    Uso de macros \texttt{ESP\_LOG}:
+    \begin{itemize}
+        \item \textbf{INFO}: 'Comando recibido: ROJO en 5s'.
+        \item \textbf{WARN}: 'Formato UART incorrecto'.
+        \item \textbf{ERROR}: 'Error al crear el Timer'.
+    \end{itemize}
+    \vfill
+    \centering
+    \fbox{\includegraphics[width=0.4\textwidth]{ejemplo_logs.png}} % Espacio para tu captura
+\end{frame}
+
+% --- CONCLUSIÓN ---
+\section{Conclusiones}
+\begin{frame}{Conclusiones y Aprendizaje}
+    \begin{itemize}
+        \item La modularidad mediante componentes de ESP-IDF facilita el mantenimiento.
+        \item El manejo de memoria dinámica en FreeRTOS requiere funciones \textit{thread-safe} (\texttt{pvPortMalloc}).
+        \item La prioridad de tareas es crítica para asegurar que la UART no pierda datos (TASK B con prioridad máxima).
+    \end{itemize}
+\end{frame}
+
+% Slide Final
+\begin{frame}
+    \centering
+    \Huge \textcolor{UCUBlue}{¿Preguntas?}
+    \vfill
+    \normalsize \insertauthor \\ 
+    \vspace{5mm}
+    \insertinstitute
+\end{frame}
+
+\end{document}
