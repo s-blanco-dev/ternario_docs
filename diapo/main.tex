@@ -24,7 +24,7 @@
 
 \lstset{
     language=C,
-    basicstyle=\ttfamily\scriptsize,
+    basicstyle=\ttfamily,
     keywordstyle=\color{codeblue},
     commentstyle=\color{codegray},
     numbers=left,
@@ -89,6 +89,29 @@ Santiago Blanco \\
     \textit{Mecanismos de comunicación: Queue y Mutex.}
 \end{frame}
 
+\begin{frame}[fragile]{Estructura del Proyecto (Shared types)}
+  Además de las indicadas por la consigna se definieron las siguientes estructuras: 
+  \begin{lstlisting}[language=C]
+typedef struct {
+    SemaphoreHandle_t color_mutex;
+    color_t *current_color;
+    led_strip_t *led_strip;
+} task_a_params_t;
+
+typedef struct {
+    QueueHandle_t command_queue;
+} task_b_params_t;
+
+typedef struct {
+    QueueHandle_t command_queue;
+    SemaphoreHandle_t color_mutex;
+    color_t *current_color;
+} task_c_params_t;
+
+  \end{lstlisting}
+  
+\end{frame}
+
 % --- SECCIÓN: IMPLEMENTACIÓN ---
 \section{Mecanismos de Sincronización}
 
@@ -98,7 +121,7 @@ Santiago Blanco \\
 \end{block}
 
 \centering
-        \fbox{\includegraphics[width=0.3\textwidth]{race.jpg}} % Espacio para tu captura
+        \fbox{\includegraphics[width=0.5\textwidth]{race.png}} % Espacio para tu captura
 \end{frame}
 
 \begin{frame}{Sincronización de procesos: Semáforo Mutex}
@@ -114,36 +137,54 @@ Santiago Blanco \\
 \end{frame}
 
 \begin{frame}[fragile]{Sincronización de procesos: Semáforo Mutex}
-    La comunicación entre \textbf{TASK B} (Productor) y \textbf{TASK C} (Consumidor):
-\begin{lstlisting}
-// Envio desde TASK B (UART)
-led_command_t cmd = {.color = parsed_color, .delay_s = 10};
-xQueueSend(xCommandQueue, &cmd, portMAX_DELAY);
-
-// Recepcion en TASK C
-led_command_t received_cmd;
-if (xQueueReceive(xCommandQueue, &received_cmd, portMAX_DELAY)) {
-    // Crear Timer one-shot...
-}
+  \textbf{TASK A} toma el mutex, realiza la operación crítica (parpadeo), y luego lo libera:
+\begin{lstlisting}[language=C]
+    while (1) {
+        // tomo control del mutex
+        if (xSemaphoreTake(params->color_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+        // ... 
+          xSemaphoreGive(params->color_mutex);         
+        }
+        // espera activa (busy waiting) si no pudo tomar el mutex
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
 \end{lstlisting}
 \end{frame}
 
+
+\section{Comunicación entre procesos: Colas}
+
+\begin{frame}{Comunicación entre procesos: Colas}
+Felipee
+\end{frame}
+
 % --- SECCIÓN: TIMER Y MEMORIA ---
-\section{Gestión de Timers y Memoria}
+\section{Gestión de Timers y UART}
 
 \begin{frame}{Software Timers y Memoria Dinámica}
-    Gestión de comandos diferidos:
-    \begin{enumerate}
-        \item \textbf{TASK C}: Recibe comando, reserva memoria con \texttt{pvPortMalloc()}.
-        \item \textbf{Timer}: Se crea con el puntero de memoria como \texttt{pvTimerID}.
-        \item \textbf{Callback}: 
-        \begin{itemize}
-            \item Recupera el color del ID del timer.
-            \item Aplica el color (usando Mutex).
-            \item \textbf{Libera} memoria con \texttt{vPortFree()}.
-            \item Auto-elimina el timer (\texttt{xTimerDelete}).
-        \end{itemize}
-    \end{enumerate}
+  PIEROOO
+\end{frame}
+
+\section{Punto de entrada (Main)}
+
+\begin{frame}[fragile]{Punto de entrada: Creación de tareas}
+  Según la API de FreeRTOS:
+  \begin{lstlisting}[language=C]
+ BaseType_t xTaskCreate( TaskFunction_t pvTaskCode,
+                         const char * const pcName,
+                         const configSTACK_DEPTH_TYPE uxStackDepth,
+                         void *pvParameters,
+                         UBaseType_t uxPriority,
+                         TaskHandle_t *pxCreatedTask
+                       );
+\end{lstlisting}
+Ejemplo de creación de \textbf{TASK B}:
+\begin{lstlisting}[language=C]
+    static task_b_params_t task_b_params;
+    task_b_params.command_queue = command_queue;
+    xTaskCreate(task_b, "TASK_B", CONFIG_ESP32_PTHREAD_TASK_STACK_SIZE_DEFAULT, &task_b_params, task_b_prio,
+                &task_b_handler);
+\end{lstlisting}
 \end{frame}
 
 % --- SECCIÓN: LOGS Y RESULTADOS ---
@@ -152,22 +193,24 @@ if (xQueueReceive(xCommandQueue, &received_cmd, portMAX_DELAY)) {
 \begin{frame}{Trazabilidad y Logs}
     Uso de macros \texttt{ESP\_LOG}:
     \begin{itemize}
-        \item \textbf{INFO}: 'Comando recibido: ROJO en 5s'.
-        \item \textbf{WARN}: 'Formato UART incorrecto'.
-        \item \textbf{ERROR}: 'Error al crear el Timer'.
+        \item \textbf{INFO (ESP\_LOGI)}: Ej: Comando recibido.
+        \item \textbf{WARN (ESP\_LOGW)}: \texttt{TASK B: unknown color: 'tiza'}.
+        \item \textbf{ERROR (ESP\_LOGE)}: Errores fatales.
     \end{itemize}
-    \vfill
+    Ejemplo de logs:
+
     \centering
-    \fbox{\includegraphics[width=0.4\textwidth]{ejemplo_logs.png}} % Espacio para tu captura
+    \fbox{\includegraphics[width=0.9\textwidth]{logi.png}} % Espacio para tu captura
+
+    \centering
+    \fbox{\includegraphics[width=0.9\textwidth]{logw.png}} % Espacio para tu captura
 \end{frame}
 
 % --- CONCLUSIÓN ---
 \section{Conclusiones}
 \begin{frame}{Conclusiones y Aprendizaje}
     \begin{itemize}
-        \item La modularidad mediante componentes de ESP-IDF facilita el mantenimiento.
-        \item El manejo de memoria dinámica en FreeRTOS requiere funciones \textit{thread-safe} (\texttt{pvPortMalloc}).
-        \item La prioridad de tareas es crítica para asegurar que la UART no pierda datos (TASK B con prioridad máxima).
+      \item Acá hay que inventar algo 
     \end{itemize}
 \end{frame}
 
