@@ -196,6 +196,13 @@ La tarea permanece bloqueada esperando bytes desde la UART. Una vez recibida una
 Si el comando es válido, se construye una estructura de tipo \texttt{led\_command\_t} y se envía a la cola compartida mediante \texttt{xQueueSend()}. En caso de error de formato o color desconocido, se registra un mensaje mediante \texttt{ESP\_LOGW()}.
 
 Luego de encolar exitosamente el comando, la tarea responde por UART con un mensaje de confirmación para facilitar la depuración y trazabilidad del sistema.
+\\
+
+Por ejemplo:
+
+\begin{center}
+\texttt{OK rojo en 5}
+\end{center}
 
 \begin{lstlisting}
 if (xQueueSend(queue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
@@ -203,11 +210,12 @@ if (xQueueSend(queue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
     continue;
 }
 
-snprintf(ack, sizeof(ack), "OK: %s en %u\n",
-         color_str, delay_s);
+snprintf(ack, sizeof(ack), "OK: %s en %u\n", color_str, delay_s);
 
 uart_write_bytes(UART_NUM_0, ack, strlen(ack));
 \end{lstlisting}
+
+\newpage
 
 \subsection{TASK C: Gestión Dinámica de Software Timers}
 
@@ -379,6 +387,8 @@ El flujo completo del sistema puede resumirse de la siguiente forma:
 
 En síntesis, \textit{TASK\_B} produce comandos, \textit{TASK\_C} los programa temporalmente mediante timers, y \textit{TASK\_A} refleja visualmente el estado actual del color en el LED RGB.
 
+\newpage
+
 % --- SECCIÓN 4: RESULTADOS ---
 \section{Resultados y Pruebas}
 
@@ -395,8 +405,8 @@ La Figura \ref{fig:monitor} muestra una ejecución típica del sistema utilizand
 \clearpage
 
 % --- SECCIÓN 5: EXTENSIONES ---
-\section{Extensiones Implementadas (Opcional)}
-\textit{Nota: Si se implementó alguna mejora opcional (como cola con timeout, cancelación de timers pendientes, comando de estado, monitor de stack o efectos de transición), detallar su funcionamiento y diseño aquí.}
+% \section{Extensiones Implementadas (Opcional)}
+% \textit{Nota: Si se implementó alguna mejora opcional (como cola con timeout, cancelación de timers pendientes, comando de estado, monitor de stack o efectos de transición), detallar su funcionamiento y diseño aquí.}
 
 % --- SECCIÓN 6: CONCLUSIONES ---
 \section{Conclusiones}
