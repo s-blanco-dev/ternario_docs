@@ -196,6 +196,61 @@ while (1) {
 }
 \end{lstlisting}
 
+
+
+\end{frame}
+
+\begin{frame}[fragile]{Flujo General de TASK\_B (Recepción UART)}
+    \begin{columns}[T] % Alineación superior de las columnas
+        
+        % --- COLUMNA IZQUIERDA: LECTURA Y PARSEO ---
+        \begin{column}{0.48\textwidth}
+            \textbf{1. Captura de Bytes Bloqueante}
+            \begin{itemize}
+                \item Espera en buffer sin consumo de CPU.
+                \item Acumula caracteres secuencialmente hasta detectar fin de línea (\texttt{\textbackslash n} o \texttt{\textbackslash r}).
+            \end{itemize}
+            \begin{lstlisting}[basicstyle=\ttfamily\tiny]
+int n = uart_read_bytes(UART_NUM_0, &byte, 1, portMAX_DELAY);
+            \end{lstlisting}
+            
+            \vspace{0.2cm}
+            \textbf{2. Validación de Formato (Parsing)}
+            \begin{itemize}
+                \item Extrae campos mediante patrones.
+                \item Si falla la estructura \texttt{<COLOR> <SEGUNDOS>}, descarta con \texttt{ESP\_LOGW}.
+            \end{itemize}
+            \begin{lstlisting}[basicstyle=\ttfamily\tiny]
+if (sscanf(line, "%15s %u", color_str, &delay_s) != 2)
+            \end{lstlisting}
+        \end{column}
+        
+        % --- COLUMNA DERECHA: TRADUCCIÓN Y ENCOLADO ---
+        \begin{column}{0.48\textwidth}
+            \textbf{3. Traducción a Diccionario RGB}
+            \begin{itemize}
+                \item Mapea cadenas de texto (\textit{rojo, verde, azul...}) a estructuras discretas \texttt{color\_t}.
+            \end{itemize}
+            \begin{lstlisting}[basicstyle=\ttfamily\tiny]
+if (!parse_color(color_str, &cmd.color))
+            \end{lstlisting}
+            
+            \vspace{0.2cm}
+            \textbf{4. Intercomunicación y Confirmación}
+            \begin{itemize}
+                \item \textbf{Encolado} Envía el comando estructurado con un timeout de 100~ms para evitar bloqueos por cola llena.
+            \end{itemize}
+            \begin{lstlisting}[basicstyle=\ttfamily\tiny]
+if (xQueueSend(queue, &cmd, pdMS_TO_TICKS(100)) == pdPASS) {
+    snprintf(ack, sizeof(ack), "OK: %s\n", color_str);
+    uart_write_bytes(UART_NUM_0, ack, strlen(ack));
+}
+            \end{lstlisting}
+        \end{column}
+
+    \end{columns}
+    
+    \vfill
 \end{frame}
 
 % --- SECCIÓN: TIMER Y MEMORIA ---

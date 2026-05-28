@@ -78,7 +78,7 @@
 
 % --- SECCIÓN 1: INTRODUCCIÓN ---
 \section{Objetivos}
-El objetivo de esta experiencia laborativa es desarrollar e implementar una arquitectura de software multitarea utilizando el sistema operativo en tiempo real \textbf{FreeRTOS} sobre el framework \textbf{ESP-IDF}. Se tiene por propósito tratar y resolver problemas de concurrencia, comunicación entre tareas y protección de recursos compartidos mediante la aplicación práctica de:
+El objetivo de este laboratorio es desarrollar e implementar una arquitectura de software multitarea utilizando el sistema operativo en tiempo real \textbf{FreeRTOS} sobre el framework \textbf{ESP-IDF}. Se tiene por propósito tratar y resolver problemas de concurrencia, comunicación entre tareas y protección de recursos compartidos mediante la aplicación práctica de:
 \begin{itemize}
     \item Creación, asignación de prioridades y control del ciclo de vida de las Tareas (\textit{Tasks}).
     \item Intercambio de mensajes mediante Colas (\textit{Queues}).
@@ -398,7 +398,7 @@ La Figura \ref{fig:monitor} muestra una ejecución típica del sistema utilizand
 
 \begin{figure}[h!]
     \centering
-    \includegraphics[width=0.75\textwidth]{results.png}
+    \includegraphics[width=0.55\textwidth]{results.png}
     \caption{Salida del monitor serie mostrando recepción de comandos, encolado y aplicación de colores.}
     \label{fig:monitor}
 \end{figure}
@@ -410,6 +410,9 @@ La Figura \ref{fig:monitor} muestra una ejecución típica del sistema utilizand
 
 % --- SECCIÓN 6: CONCLUSIONES ---
 \section{Conclusiones}
-Conclusiones técnicas sobre el comportamiento del sistema multitarea, las dificultades encontradas al migrar o trabajar en ESP-IDF v6 (como la inclusión explícita de cabeceras de FreeRTOS) y el aprendizaje adquirido sobre sistemas de tiempo real.
+El objetivo de este laboratorio fue alcanzado con éxito, permitiendo analizar diversas cuestiones concernientes a la comunicación y sincronización de procesos usando estructuras propias del sistema operativo FreeRTOS. 
+
+En definitiva, se evidenció claramente la necesidad del uso de herramientas como mutex para evitar condiciones de carrera, colas para intercambio de mensajes entre los procesos, y temporización en el marco de un sistema operativo de tiempo real usando timers por software. 
+
 
 \end{document}
