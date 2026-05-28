@@ -4,6 +4,9 @@
 \usepackage[utf8]{inputenc}
 \usepackage[spanish]{babel}
 \usepackage{helvet} % Fuente similar a Arial para mejor lectura
+\usepackage{tikz}
+\usepackage{graphicx}
+\usetikzlibrary{positioning, arrows.meta}
 
 % --- Configuración del Tema Beamer ---
 \usetheme{Madrid}
@@ -254,12 +257,104 @@ if (xQueueSend(queue, &cmd, pdMS_TO_TICKS(100)) == pdPASS) {
 \end{frame}
 
 % --- SECCIÓN: TIMER Y MEMORIA ---
-\section{Gestión de Timers y UART}
+\section{Gestión de Timers}
 
-\begin{frame}{Software Timers y Memoria Dinámica}
-  FELIPE
+% --- SECCIÓN: TASK C ---
+\begin{frame}{TASK C: rol dentro del sistema}
+    \begin{block}{Responsabilidad principal}
+        \textbf{TASK C} recibe comandos desde la cola y programa la aplicación futura del color mediante un \textbf{software timer}.
+    \end{block}
+
+    \begin{itemize}
+        \item Recibe estructuras de tipo \texttt{led\_command\_t}.
+        \item Cada comando contiene:
+        \begin{itemize}
+            \item un color RGB;
+            \item un retardo en segundos.
+        \end{itemize}
+        \item No prende ni apaga directamente el LED físico.
+        \item Su función es actualizar, en el momento correcto, la variable compartida \texttt{current\_color}.
+    \end{itemize}
+
+    \vfill
+    \centering
+    \textit{TASK C funciona como intermediaria entre el comando recibido y el cambio efectivo de color.}
 \end{frame}
 
+\begin{frame}[fragile]{Flujo interno de TASK C}
+    \begin{columns}
+        \begin{column}{0.55\textwidth}
+            \begin{enumerate}
+                \item Espera comandos en la cola.
+                \item Al recibir uno, reserva memoria para el color.
+                \item Convierte segundos a ticks.
+                \item Crea un timer \textit{one-shot}.
+                \item Inicia el timer.
+                \item Vuelve a esperar nuevos comandos.
+            \end{enumerate}
+        \end{column}
+
+        \begin{column}{0.45\textwidth}
+\begin{verbatim}
+TASK_C
+  v
+xQueueReceive()
+  v
+pvPortMalloc()
+  v
+xTimerCreate()
+  v
+xTimerStart()
+  v
+espera otro comando
+\end{verbatim}
+        \end{column}
+    \end{columns}
+
+    \vspace{2mm}
+
+    \begin{block}{Ojaldre}
+        TASK C \textbf{no espera bloqueada} el delay del comando. Crea un timer y queda disponible para procesar otros comandos.
+    \end{block}
+\end{frame}
+
+\begin{frame}[fragile]{Timer callback: aplicación del color}
+Cuando vence el timer, FreeRTOS ejecuta automáticamente el callback:
+
+\begin{lstlisting}
+static void color_timer_callback(TimerHandle_t xTimer) {
+    color_t *new_color =
+        (color_t *) pvTimerGetTimerID(xTimer);
+
+    if (xSemaphoreTake(s_color_mutex,
+                       portMAX_DELAY) == pdTRUE) {
+        s_current_color->r = new_color->r;
+        s_current_color->g = new_color->g;
+        s_current_color->b = new_color->b;
+
+        xSemaphoreGive(s_color_mutex);
+    }
+
+    vPortFree(new_color);
+    xTimerDelete(xTimer, 0);
+}
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}{Timer callback: puntos clave}
+    \begin{itemize}
+        \item El callback \textbf{no se llama manualmente}: lo ejecuta FreeRTOS cuando vence el timer.
+        \item Recupera el color asociado al timer con \texttt{pvTimerGetTimerID()}.
+        \item Toma el mutex para modificar \texttt{current\_color}.
+        \item Libera el mutex después de la operación crítica.
+        \item Libera la memoria dinámica con \texttt{vPortFree()}.
+        \item Elimina el timer con \texttt{xTimerDelete()}.
+    \end{itemize}
+
+    \begin{block}{Resumen}
+        TASK C programa la acción; el callback ejecuta el cambio real del color.
+    \end{block}
+\end{frame}
 \section{Punto de entrada (Main)}
 
 \begin{frame}[fragile]{Punto de entrada: Creación de tareas}
@@ -301,12 +396,68 @@ xTaskCreate(task_b, "TASK_B", CONFIG_ESP32_PTHREAD_TASK_STACK_SIZE_DEFAULT, &tas
     \fbox{\includegraphics[width=0.9\textwidth]{logw.png}} % Espacio para tu captura
 \end{frame}
 
-% --- CONCLUSIÓN ---
+
 \section{Conclusiones}
-\begin{frame}{Conclusiones y Aprendizaje}
-    \begin{itemize}
-      \item Acá hay que inventar algo 
-    \end{itemize}
+
+\begin{frame}{Flujo general del proyecto}
+    \centering
+
+    \resizebox{0.96\textwidth}{!}{
+    \begin{tikzpicture}[
+        box/.style={
+            rectangle,
+            rounded corners,
+            draw=UCUBlue,
+            thick,
+            align=center,
+            minimum width=2.45cm,
+            minimum height=1cm,
+            fill=UCUBlue!8,
+            font=\scriptsize
+        },
+        arrow/.style={-{Latex[length=2mm]}, thick, UCUBlue},
+        node distance=1.1cm and 0.8cm
+    ]
+
+    % Fila superior
+    \node[box] (uart) {Usuario\\\texttt{azul 2}};
+    \node[box, right=of uart] (taskb) {\textbf{TASK B}\\UART + parsing\\prioridad alta};
+    \node[box, right=of taskb] (queue) {\textbf{Queue}\\\texttt{led\_command\_t}};
+    \node[box, right=of queue] (taskc) {\textbf{TASK C}\\recibe comando\\crea timer};
+
+    % Fila inferior
+    \node[box, below=1.25cm of taskc] (timer) {\textbf{Software Timer}\\one-shot};
+    \node[box, left=of timer] (callback) {\textbf{Callback}\\toma mutex\\actualiza color};
+    \node[box, left=of callback] (color) {\textbf{current\_color}\\recurso compartido};
+    \node[box, left=of color] (taska) {\textbf{TASK A}\\lee color\\parpadea LED};
+
+    % Flechas
+    \draw[arrow] (uart) -- (taskb);
+    \draw[arrow] (taskb) -- node[above, font=\tiny]{\texttt{xQueueSend()}} (queue);
+    \draw[arrow] (queue) -- node[above, font=\tiny]{\texttt{xQueueReceive()}} (taskc);
+    \draw[arrow] (taskc) -- node[right, font=\tiny]{\texttt{xTimerCreate()}} (timer);
+    \draw[arrow] (timer) -- node[below, font=\tiny]{vence} (callback);
+    \draw[arrow] (callback) -- node[below, font=\tiny]{mutex} (color);
+    \draw[arrow] (color) -- node[below, font=\tiny]{lee} (taska);
+
+    \end{tikzpicture}
+    }
+
+    \vspace{3mm}
+
+    \begin{block}{Resumen}
+        \texttt{TASK B} recibe el comando; \texttt{TASK C} programa cuándo aplicarlo;
+        el callback actualiza \texttt{current\_color}; y \texttt{TASK A} refleja ese color en el LED.
+    \end{block}
+\end{frame}
+
+% --- CONCLUSIÓN ---
+\begin{frame}{Bibliografía}
+\begin{itemize}
+    \item Tanenbaum, A. S. (2009). \textit{Sistemas Operativos Modernos} (3.ª ed.). Pearson Educación.
+    \item Silberschatz, A., Galvin, P. B., \& Gagne, G. (2018). \textit{Operating System Concepts} (10th ed.). Wiley.
+    \item Real Time Engineers Ltd. (s. f.). \textit{FreeRTOS Reference Manual}. Recuperado de \url{https://www.freertos.org/Documentation/}
+\end{itemize}
 \end{frame}
 
 % Slide Final
