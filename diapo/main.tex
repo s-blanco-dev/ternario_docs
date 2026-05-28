@@ -166,15 +166,43 @@ typedef struct {
 
 \section{Comunicación entre procesos: Colas}
 
-\begin{frame}{Comunicación entre procesos: Colas}
-Felipee
+\begin{frame}[fragile]{Comunicación entre procesos: Colas}
+
+La comunicación entre \textbf{TASK\_B} y \textbf{TASK\_C} se realiza mediante una 
+\texttt{Queue} de FreeRTOS.
+
+\vspace{0.3cm}
+
+\textbf{TASK\_B} recibe comandos desde UART y los encola:
+
+\begin{lstlisting}[language=C]
+led_command_t cmd;
+cmd.color = color;
+cmd.delay_s = delay_s;
+
+xQueueSend(queue, &cmd, pdMS_TO_TICKS(100));
+\end{lstlisting}
+
+\vspace{0.2cm}
+
+\textbf{TASK\_C} permanece bloqueada esperando comandos:
+
+\begin{lstlisting}[language=C]
+led_command_t cmd;
+while (1) {
+    if (xQueueReceive(queue, &cmd, portMAX_DELAY) == pdTRUE) {
+        // crear timer y aplicar color
+    }
+}
+\end{lstlisting}
+
 \end{frame}
 
 % --- SECCIÓN: TIMER Y MEMORIA ---
 \section{Gestión de Timers y UART}
 
 \begin{frame}{Software Timers y Memoria Dinámica}
-  PIEROOO
+  FELIPE
 \end{frame}
 
 \section{Punto de entrada (Main)}
@@ -192,10 +220,10 @@ Felipee
 \end{lstlisting}
 Ejemplo de creación de \textbf{TASK B}:
 \begin{lstlisting}[language=C]
-    static task_b_params_t task_b_params;
-    task_b_params.command_queue = command_queue;
-    xTaskCreate(task_b, "TASK_B", CONFIG_ESP32_PTHREAD_TASK_STACK_SIZE_DEFAULT, &task_b_params, task_b_prio,
-                &task_b_handler);
+static task_b_params_t task_b_params;
+task_b_params.command_queue = command_queue;
+xTaskCreate(task_b, "TASK_B", CONFIG_ESP32_PTHREAD_TASK_STACK_SIZE_DEFAULT, &task_b_params, task_b_prio,
+            &task_b_handler);
 \end{lstlisting}
 \end{frame}
 
